@@ -1,0 +1,92 @@
+DELIMITER $$
+
+CREATE PROCEDURE BeforeUserInsert(
+    IN p_name VARCHAR(255),
+    IN p_email VARCHAR(255),
+    IN p_phone VARCHAR(15),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+    DECLARE phoneExists INT;
+    DECLARE emailExists INT;
+
+    -- Check if email already exists
+    SELECT COUNT(*) INTO emailExists
+    FROM user WHERE email = p_email;
+
+    IF emailExists > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This Mail is already influenced.';
+    END IF;
+
+    -- Check if phone already exists
+    SELECT COUNT(*) INTO phoneExists
+    FROM user WHERE phone = p_phone;
+
+    IF phoneExists > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'I already got you in my contacts.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+-- income deletion trigger 
+
+DROP TRIGGER IF EXISTS BeforeDeleteIncome;
+
+DELIMITER $$
+
+CREATE TRIGGER BeforeDeleteIncome
+BEFORE DELETE ON income
+FOR EACH ROW
+BEGIN
+    -- Insert the record being deleted into the deleted_income table
+    INSERT INTO deleted_income (income_id, income_amt, income_type, month, year, last_updated_at, user_id)
+    VALUES (OLD.income_id, OLD.income_amt, OLD.income_type, OLD.month, OLD.year, OLD.updated_at, OLD.user_id);
+END $$
+
+DELIMITER ;
+
+-- budget deletion trigger
+DELIMITER $$
+
+CREATE TRIGGER after_budget_delete
+AFTER DELETE ON budget
+FOR EACH ROW
+BEGIN
+    INSERT INTO deleted_budget (
+        budget_id, user_id, budget_type, budget_amt, month, year, description, created_at
+    )
+    VALUES (
+        OLD.budget_id, OLD.user_id, OLD.budget_type, OLD.budget_amount, OLD.month, OLD.year, OLD.description, OLD.created_at
+    );
+END $$
+
+DELIMITER ;
+-- category deletion trigger 
+DELIMITER $$
+
+CREATE TRIGGER before_delete_category
+BEFORE DELETE ON Category
+FOR EACH ROW
+BEGIN
+    -- Insert the details of the deleted category into the deleted_category table
+    INSERT INTO deleted_category (category_id, budget_id, category_name)
+    VALUES (OLD.category_id, OLD.budget_id, OLD.category_name);
+END$$
+
+DELIMITER ;
+
+
+-- expense deletion trigger
+DELIMITER $$
+
+CREATE TRIGGER before_delete_expense
+BEFORE DELETE ON Expense
+FOR EACH ROW
+BEGIN
+    -- Insert the details of the deleted expense into the deleted_expense table
+    INSERT INTO deleted_expense (expense_id, category_id, expense_amount, expense_date, description, created_at)
+    VALUES (OLD.expense_id, OLD.category_id, OLD.expense_amount, OLD.expense_date, OLD.description, OLD.created_at);
+END$$
+
+DELIMITER ;

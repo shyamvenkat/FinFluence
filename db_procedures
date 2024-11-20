@@ -1,0 +1,565 @@
+DELIMITER $$
+
+CREATE PROCEDURE BeforeUserInsert(
+    IN p_name VARCHAR(255),
+    IN p_email VARCHAR(255),
+    IN p_phone VARCHAR(15),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+    DECLARE phoneExists INT;
+    DECLARE emailExists INT;
+
+    -- Check if email already exists
+    SELECT COUNT(*) INTO emailExists
+    FROM user WHERE email = p_email;
+
+    IF emailExists > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This Mail is already influenced.';
+    END IF;
+
+    -- Check if phone already exists
+    SELECT COUNT(*) INTO phoneExists
+    FROM user WHERE phone = p_phone;
+
+    IF phoneExists > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'I already got you in my contacts.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE CheckLogin(
+    IN p_email VARCHAR(255),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+    DECLARE userExists INT;
+    DECLARE correctPassword VARCHAR(255);
+
+    -- Check if the email exists
+    SELECT COUNT(*), password INTO userExists, correctPassword
+    FROM user
+    WHERE email = p_email;
+
+    IF userExists = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Oops! Seems like you got the wrong mail id.';
+    ELSEIF correctPassword != p_password THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Shh! That isn''t your password, try something else.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER //
+
+CREATE PROCEDURE CheckEmailExists(IN user_email VARCHAR(255))
+BEGIN
+    SELECT COUNT(*) FROM user WHERE email = user_email;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE CheckPhone(IN user_email VARCHAR(255), IN user_phone VARCHAR(15))
+BEGIN
+    DECLARE db_phone VARCHAR(15);
+
+    -- Fetch the phone number associated with the given email
+    SELECT phone INTO db_phone FROM user WHERE email = user_email;
+
+    -- Check if the phone number matches
+    IF db_phone IS NOT NULL AND db_phone = user_phone THEN
+        SELECT 1;  -- Phone number matches
+    ELSE
+        SELECT NULL;  -- Phone number does not match or email not found
+    END IF;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE UpdateUserPassword(IN user_email VARCHAR(255), IN new_password VARCHAR(255))
+BEGIN
+    UPDATE user SET password = new_password WHERE email = user_email;
+END //
+
+DELIMITER ;
+
+
+
+
+--INCOME Related
+
+DELIMITER $$
+
+CREATE PROCEDURE AddIncome(
+    IN p_user_email VARCHAR(255),
+    IN p_income_amt DECIMAL(10, 2),
+    IN p_income_type VARCHAR(50),
+    IN p_month VARCHAR(20),  -- Month as VARCHAR
+    IN p_year INT    -- Year as INT
+)
+BEGIN
+    DECLARE v_user_id INT;
+
+    -- Fetch user_id using the email
+    SELECT user_id INTO v_user_id 
+    FROM user 
+    WHERE email = p_user_email;
+
+    -- Check if user exists
+    IF v_user_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User does not exist.';
+    END IF;
+
+    -- Insert into income table with month as VARCHAR
+    INSERT INTO income (user_id, income_amt, income_type, month, year)
+    VALUES (v_user_id, p_income_amt, p_income_type, p_month, p_year);
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE UpdateIncome(
+    IN p_income_id INT,
+    IN p_income_amt DECIMAL(10, 2),
+    IN p_income_type VARCHAR(50),
+    IN p_month VARCHAR(20),  -- Month as VARCHAR
+    IN p_year INT    -- Year as INT
+)
+BEGIN
+    -- Update income entry
+    UPDATE income
+    SET income_amt = p_income_amt,
+        income_type = p_income_type,
+        month = p_month,
+        year = p_year
+    WHERE income_id = p_income_id;
+
+    -- Check if update was successful
+    IF ROW_COUNT() = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Income record not found.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE FetchIncome(
+    IN p_user_email VARCHAR(255),
+    IN p_month VARCHAR(20),  -- Month as VARCHAR
+    IN p_year INT    -- Year as INT
+)
+BEGIN
+    DECLARE v_user_id INT;
+
+    -- Fetch user_id using the email
+    SELECT user_id INTO v_user_id 
+    FROM user 
+    WHERE email = p_user_email;
+
+    -- Check if user exists
+    IF v_user_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User does not exist.';
+    END IF;
+
+    -- Fetch income entries, optionally filtered by month and year
+    SELECT income_id, income_amt, income_type, month, year, updated_at
+    FROM income
+    WHERE user_id = v_user_id
+      AND (p_month IS NULL OR month = p_month)
+      AND (p_year IS NULL OR year = p_year);  -- Filter by month and year if provided
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE DeleteIncome(
+    IN p_income_id INT  -- Only income_id is needed now
+)
+BEGIN
+    -- Delete income entry for the given income_id
+    DELETE FROM income
+    WHERE income_id = p_income_id;
+
+    -- Check if delete was successful
+    IF ROW_COUNT() = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Income record not found.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+-- Budget Related
+
+DELIMITER $$
+
+CREATE PROCEDURE GetBudgetsByUser(
+    IN p_email VARCHAR(255),
+    IN p_month VARCHAR(20),
+    IN p_year INT
+)
+BEGIN
+    -- Ensure inputs are valid (optional)
+    IF p_email IS NULL OR p_month IS NULL OR p_year IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invalid input parameters';
+    END IF;
+
+    -- Fetch the budgets for the user
+    SELECT 
+        b.Budget_ID AS budget_id,
+        b.Budget_Type AS category,
+        b.Budget_Amount AS budget_amt,
+        b.Month AS month,
+        b.Year AS year
+    FROM 
+        Budget b
+    INNER JOIN 
+        User u 
+    ON 
+        b.User_ID = u.User_ID
+    WHERE 
+        LOWER(u.Email) = LOWER(p_email) -- Case-insensitive email comparison
+        AND LOWER(b.Month) = LOWER(p_month) -- Case-insensitive month comparison
+        AND b.Year = p_year;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE AddBudget(
+    IN p_user_email VARCHAR(255),
+    IN p_budget_type VARCHAR(50),
+    IN p_budget_amount DECIMAL(10,2),
+    IN p_month VARCHAR(20),
+    IN p_year INT,
+    IN p_description TEXT
+)
+BEGIN
+    DECLARE v_user_id INT;
+    DECLARE v_existing_budget INT;
+
+    -- Get User_ID based on the email (case-insensitive comparison)
+    SELECT user_id INTO v_user_id
+    FROM user 
+    WHERE LOWER(email) = LOWER(p_user_email);
+
+    -- Check if user exists
+    IF v_user_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User not found';
+    END IF;
+
+    -- Check if the budget_type already exists for the given month and year
+    SELECT COUNT(*) INTO v_existing_budget
+    FROM budget
+    WHERE user_id = v_user_id
+      AND budget_type = p_budget_type
+      AND month = p_month
+      AND year = p_year;
+
+    -- If the budget already exists, raise an error
+    IF v_existing_budget > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This budget type has already been used for the selected month and year';
+    END IF;
+
+    -- Insert the new budget record
+    INSERT INTO budget (user_id, budget_type, budget_amount, month, year, description)
+    VALUES (v_user_id, p_budget_type, p_budget_amount, p_month, p_year, p_description);
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE UpdateBudget(
+    IN p_budget_id INT,
+    IN p_user_email VARCHAR(255),
+    IN p_budget_type VARCHAR(50),
+    IN p_budget_amount DECIMAL(10,2),
+    IN p_month VARCHAR(20),
+    IN p_year INT,
+    IN p_description TEXT
+)
+BEGIN
+    DECLARE v_user_id INT;
+
+
+    SELECT User_ID INTO v_user_id
+    FROM User
+    WHERE LOWER(Email) = LOWER(p_user_email);
+
+
+    IF v_user_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'User not found';
+    END IF;
+
+
+    UPDATE Budget
+    SET Budget_Type = p_budget_type,
+        Budget_Amount = p_budget_amount,
+        Month = p_month,
+        Year = p_year,
+        Description = p_description
+    WHERE Budget_ID = p_budget_id AND User_ID = v_user_id;
+
+
+    IF ROW_COUNT() = 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Budget not found or no changes made';
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE DeleteBudget(IN p_budget_id INT)
+BEGIN
+    DECLARE p_category_id INT;
+    Select category_id into p_category_id from category where budget_id = p_budget_id;
+    delete from expense where category_id = p_category_id;
+    Delete from category where budget_id = p_budget_id;
+    DELETE FROM Budget WHERE Budget_ID = p_budget_id;
+END $$
+
+DELIMITER ;
+
+-- Expenses related 
+
+DELIMITER $$
+
+CREATE PROCEDURE FetchExpenses(IN user_email VARCHAR(255), IN month_name VARCHAR(20), IN year INT)
+BEGIN
+    -- Declare a variable to store the user ID
+    DECLARE v_user_id INT;
+
+    -- Get the user ID based on the provided email
+    SELECT user_id INTO v_user_id
+    FROM user
+    WHERE email = user_email;
+
+    -- Check if user exists
+    IF v_user_id IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User not found';
+    END IF;
+
+    -- Select expenses for the given user, month, and year
+    SELECT
+        e.expense_id,
+        e.expense_date,
+        c.category_name,
+        b.Budget_Type,
+        e.expense_amount,
+        e.description
+    FROM expense e
+    JOIN category c ON e.category_id = c.category_id
+    JOIN budget b ON c.budget_id = b.Budget_ID
+    WHERE b.User_ID = v_user_id
+      AND b.month = month_name    -- Compare month directly as a string
+      AND b.Year = year
+    ORDER BY e.expense_date;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE PROCEDURE UpdateExpense(
+    IN p_expense_id INT,
+    IN p_amount DECIMAL(10, 2),
+    IN p_budget_type VARCHAR(50),
+    IN p_category VARCHAR(100),
+    IN p_expense_date DATE,
+    IN p_description TEXT,
+    IN p_month VARCHAR(20),  -- Added parameter
+    IN p_year INT            -- Added parameter
+)
+BEGIN
+    DECLARE old_category_name VARCHAR(100);
+    DECLARE old_expense_amount DECIMAL(10, 2);
+    DECLARE old_category_total_expense DECIMAL(10, 2);
+    DECLARE old_budget_total_expense DECIMAL(10, 2);
+    DECLARE old_category_id INT;
+    DECLARE p_category_id INT;
+    DECLARE p_budget_id INT;
+
+    -- Fetch current expense details
+    SELECT 
+        c.category_name,
+        c.category_id,
+        c.total_expense AS old_category_total_expense,
+        b.Budget_ID AS p_budget_id,
+        b.total_expense AS old_budget_total_expense,
+        e.expense_amount
+    INTO 
+        old_category_name,
+        old_category_id,
+        old_category_total_expense,
+        p_budget_id,
+        old_budget_total_expense,
+        old_expense_amount
+    FROM expense e
+    JOIN category c ON e.category_id = c.category_id
+    JOIN budget b ON c.budget_id = b.Budget_ID
+    WHERE e.expense_id = p_expense_id;
+
+    -- Case 1: Update the amount, same category
+    IF old_category_name = p_category THEN
+        -- Update the expense record
+        UPDATE expense
+        SET expense_amount = p_amount,
+            expense_date = p_expense_date,
+            description = p_description
+        WHERE expense_id = p_expense_id;
+
+        -- Update the total_expense in the category
+        UPDATE category
+        SET total_expense = old_category_total_expense + p_amount - old_expense_amount
+        WHERE category_id = old_category_id;
+
+        -- Update the total_expense in the budget
+        UPDATE budget
+        SET total_expense = old_budget_total_expense + p_amount - old_expense_amount
+        WHERE Budget_ID = p_budget_id;
+
+    -- Case 2: Change category
+    ELSE
+        -- Check if the new category exists
+        SELECT category_id INTO p_category_id
+        FROM category
+        WHERE category_name = p_category 
+          AND budget_id = p_budget_id
+          AND EXISTS (
+              SELECT 1 FROM budget WHERE month = p_month AND year = p_year
+          );
+
+        -- If new category does not exist, create it
+        IF p_category_id IS NULL THEN
+            INSERT INTO category (budget_id, category_name, total_expense)
+            VALUES (p_budget_id, p_category, 0);
+            SELECT LAST_INSERT_ID() INTO p_category_id;
+        END IF;
+
+        -- Update the expense record
+        UPDATE expense
+        SET expense_amount = p_amount,
+            category_id = p_category_id,
+            expense_date = p_expense_date,
+            description = p_description
+        WHERE expense_id = p_expense_id;
+
+        -- Decrease the total_expense in the old category
+        UPDATE category
+        SET total_expense = old_category_total_expense - old_expense_amount
+        WHERE category_id = old_category_id;
+
+        -- Increase the total_expense in the new category
+        UPDATE category
+        SET total_expense = total_expense + p_amount
+        WHERE category_id = p_category_id;
+
+        -- Update the total_expense in the budget
+        UPDATE budget
+        SET total_expense = old_budget_total_expense + p_amount - old_expense_amount
+        WHERE Budget_ID = p_budget_id;
+
+        -- If the old category's total expense becomes zero, delete it
+        IF old_category_total_expense - old_expense_amount = 0 THEN
+            DELETE FROM category
+            WHERE category_id = old_category_id;
+        END IF;
+    END IF;
+
+END //
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE DeleteExpense(
+    IN p_expense_id INT
+)
+BEGIN
+    DECLARE p_budget_id INT;
+    DECLARE p_category_id INT;
+    DECLARE p_expense_amount DECIMAL(10, 2);
+    DECLARE p_total_expense DECIMAL(10, 2);
+
+    -- Fetch Category_ID and Expense_Amount from the Expense table
+    SELECT category_id, expense_amount
+    INTO p_category_id, p_expense_amount
+    FROM Expense
+    WHERE expense_id = p_expense_id;
+
+    -- Fetch Budget_ID from the Category table using the Category_ID
+    SELECT budget_id
+    INTO p_budget_id
+    FROM Category
+    WHERE category_id = p_category_id;
+
+    -- Delete the expense first to avoid foreign key constraints
+    DELETE FROM Expense WHERE expense_id = p_expense_id;
+
+    -- Reduce the total expense for the category
+    UPDATE Category
+    SET total_expense = total_expense - p_expense_amount
+    WHERE category_id = p_category_id;
+
+    -- Check if the total expense in the category is now 0 or negative
+    SELECT total_expense INTO p_total_expense
+    FROM Category
+    WHERE category_id = p_category_id;
+
+    -- If total expense is 0 or negative, delete the category
+    IF p_total_expense <= 0 THEN
+        DELETE FROM Category WHERE category_id = p_category_id;
+    END IF;
+
+    -- Reduce the total expense for the budget
+    UPDATE Budget
+    SET total_expense = total_expense - p_expense_amount
+    WHERE budget_id = p_budget_id;
+
+    -- Ensure that the budget total doesn't go negative
+    IF (SELECT total_expense FROM Budget WHERE budget_id = p_budget_id) < 0 THEN
+        -- If necessary, you can raise an exception or handle the error here
+        -- For example, rollback or alert the user, etc.
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Total Expense in Budget cannot be negative';
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

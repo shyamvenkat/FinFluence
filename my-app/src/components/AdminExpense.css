@@ -1,0 +1,85 @@
+/* General Container Styling */
+.admin-expense-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 1rem;
+    background-color: #ffffff; /* Explicitly set white background */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Soft shadow */
+    border-radius: 8px;
+}
+
+/* Heading Styling */
+h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.expense-section {
+    margin-top: 2rem;
+    background-color: white;
+}
+
+h3 {
+    font-size: 1.5rem;
+    color: #555;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 8px;
+}
+
+/* Table Styling */
+.expense-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.expense-table th,
+.expense-table td {
+    padding: 12px;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.expense-table th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+    color: #333;
+}
+
+.expense-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.expense-table tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Loading and Error States */
+.loading,
+.error {
+    text-align: center;
+    font-size: 1.2rem;
+    color: #777;
+    padding: 2rem;
+}
+
+/* Back Button Styling */
+.back-to-dashboard {
+    background-color: #3498db;
+    color: white;
+    padding: 10px 20px;
+    margin-bottom: 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    align-self: flex-start;
+    transition: background-color 0.3s ease;
+}
+
+.back-to-dashboard:hover {
+    background-color: #2980b9;
+}
